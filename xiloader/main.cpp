@@ -24,6 +24,8 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include "console.h"
 #include "functions.h"
 #include "network.h"
+#include "inet_ntop.h"
+#include "inet_pton.h"
 
 #include <thread>
 
@@ -51,10 +53,23 @@ extern "C"
  */
 __declspec(naked) void HairpinFixCave(void)
 {
+#ifdef _MSC_VER
     __asm mov eax, g_NewServerAddress
     __asm mov [edx + 0x012E90], eax
     __asm mov [edx], eax
     __asm jmp g_HairpinReturnAddress
+#else
+    asm(
+"movl %0, %%eax\n\t"
+"movl %%eax,0x012E90(%%edx)\n\t"
+"movl %%eax,(%%edx)\n\t"
+"jmpl *%1"
+: /* output*/
+: "r" (g_NewServerAddress), "r" (g_HairpinReturnAddress) /* input*/
+: /* invalidated registers*/
+);
+
+#endif
 }
 
 /**
@@ -211,7 +226,7 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
         /* Attach detour for gethostbyname.. */
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
-        DetourAttach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
+        DetourAttach(&(PVOID&)Real_gethostbyname, (PVOID*)Mine_gethostbyname);
         if (DetourTransactionCommit() != NO_ERROR)
         {
             xiloader::console::output(xiloader::color::error, "Failed to detour function 'gethostbyname'. Cannot continue!");
@@ -238,7 +253,7 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
         {
             /* Invoke the setup functions for polcore.. */
             polcore->SetAreaCode(language);
-            polcore->SetParamInit(GetModuleHandle(NULL), " /game eAZcFcB -net 3");
+            polcore->SetParamInit(GetModuleHandle(NULL), const_cast<char*>(" /game eAZcFcB -net 3"));
 
             /* Obtain the common function table.. */
             void* (**lpCommandTable)(...);
@@ -299,7 +314,7 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
     /* Detach detour for gethostbyname. */
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
-    DetourDetach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
+    DetourDetach(&(PVOID&)Real_gethostbyname, (PVOID*)Mine_gethostbyname);
     DetourTransactionCommit();
 
     /* Cleanup COM */

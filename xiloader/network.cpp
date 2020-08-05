@@ -20,6 +20,8 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 */
 
 #include "network.h"
+#include "inet_ntop.h"
+#include "inet_pton.h"
 
 #include <thread>
 
@@ -135,7 +137,8 @@ namespace xiloader
         }
 
         /* Set socket option on internal server to allow sharing the port for multibox users */
-        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)(&[] { return TRUE; }), sizeof(BOOL)) == SOCKET_ERROR)
+        BOOL optflag = TRUE;
+        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, &(const char&)optflag, sizeof(BOOL)) == SOCKET_ERROR)
         {
             xiloader::console::output(xiloader::color::error, "Failed to set reusable address option on socket. %d", WSAGetLastError());
 
