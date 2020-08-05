@@ -35,8 +35,8 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include <string>
 #include <time.h>
 
-#pragma comment(lib, "detours/detours.lib")
-#include "detours/detours.h"
+#pragma comment(lib, "minhook/libMinHook.lib")
+#include "minhook/MinHook.h"
 
 #include "polcore.h"
 #include "FFXi.h"

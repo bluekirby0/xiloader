@@ -45,7 +45,8 @@ extern "C"
     // FFXI is still using gethostbyname and we cannot easily change that behavior
     // so we will ignore the deprecated method
     #pragma warning(suppress: 4996)
-    hostent* (WINAPI __stdcall * Real_gethostbyname)(const char* name) = gethostbyname;
+    typedef hostent* (WINAPI __stdcall * GETHOSTBYNAME)(const char* name);
+    GETHOSTBYNAME fp_gethostbyname;
 }
 
 /**
@@ -152,11 +153,11 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
     xiloader::console::output(xiloader::color::debug, "Resolving host: %s", name);
 
     if (!strcmp("ffxi00.pol.com", name))
-        return Real_gethostbyname(g_ServerAddress.c_str());
+        return fp_gethostbyname(g_ServerAddress.c_str());
     if (!strcmp("pp000.pol.com", name))
-        return Real_gethostbyname("127.0.0.1");
+        return fp_gethostbyname("127.0.0.1");
 
-    return Real_gethostbyname(name);
+    return fp_gethostbyname(name);
 }
 
 /**
@@ -224,14 +225,19 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
     if (!errorState)
     {
         /* Attach detour for gethostbyname.. */
-        DetourTransactionBegin();
-        DetourUpdateThread(GetCurrentThread());
-        DetourAttach(&(PVOID&)Real_gethostbyname, (PVOID*)Mine_gethostbyname);
-        if (DetourTransactionCommit() != NO_ERROR)
+        if(MH_CreateHook(&(LPVOID&)gethostbyname, &(LPVOID&)Mine_gethostbyname,
+			reinterpret_cast<LPVOID*>(&fp_gethostbyname)) != MH_OK)
         {
-            xiloader::console::output(xiloader::color::error, "Failed to detour function 'gethostbyname'. Cannot continue!");
+            xiloader::console::output(xiloader::color::error, "Failed to hook function 'gethostbyname'. Cannot continue!");
             errorState = true;
         }
+
+        if(MH_EnableHook(&(LPVOID&)gethostbyname) != MH_OK)
+        {
+            xiloader::console::output(xiloader::color::error, "Failed to enable hook 'gethostbyname'. Cannot continue!");
+            errorState = true;
+        }
+
     }
 
     /* Start hairpin hack thread if required.. */
@@ -312,10 +318,10 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
     xiloader::NotifyShutdown(sharedState);
 
     /* Detach detour for gethostbyname. */
-    DetourTransactionBegin();
-    DetourUpdateThread(GetCurrentThread());
-    DetourDetach(&(PVOID&)Real_gethostbyname, (PVOID*)Mine_gethostbyname);
-    DetourTransactionCommit();
+    if(MH_DisableHook(&(LPVOID&)gethostbyname) != MH_OK)
+    {
+		xiloader::console::output(xiloader::color::error, "Failed unhooking function 'gethostbyname'.");
+	}
 
     /* Cleanup COM */
     CoUninitialize();
@@ -331,6 +337,12 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
  */
 int __cdecl main(int argc, char* argv[])
 {
+	if (MH_Initialize() != MH_OK)
+    {
+		xiloader::console::output(xiloader::color::error, "Failed to initialize hooking library.");
+        return 1;
+    }
+
     bool bUseHairpinFix = false;
     xiloader::Language language = xiloader::Language::English; // The language of the loader to be used for polcore.
     std::string lobbyServerPort = "51220"; // The server lobby server port.
@@ -354,6 +366,7 @@ int __cdecl main(int argc, char* argv[])
     if (ret != 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to initialize winsock, error code: %d", ret);
+        MH_Uninitialize();
         return 1;
     }
 
@@ -472,6 +485,12 @@ int __cdecl main(int argc, char* argv[])
     WSACleanup();
 
     xiloader::console::output(xiloader::color::error, "Closing...");
+
+	if (MH_Uninitialize() != MH_OK)
+    {
+		xiloader::console::output(xiloader::color::error, "Failed to cleanup hooking library.");
+        return 1;
+    }
 
     return ERROR_SUCCESS;
 }

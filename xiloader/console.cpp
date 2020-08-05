@@ -26,6 +26,12 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 /* Global Externs */
 extern bool g_Hide;
 
+#ifndef _MSC_VER
+extern "C" {
+	const GUID IID_ITaskbarList  = {0x56FDF342, 0xFD6D, 0x11D0, {0x95, 0x8A, 0x00, 0x60, 0x97, 0xC9, 0xA0, 0x90} };
+}
+#endif
+
 namespace xiloader
 {
     /**
