@@ -21,7 +21,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 
 #include "console.h"
 
-#include <ShObjIdl.h>
+#include <shobjidl.h>
 
 /* Global Externs */
 extern bool g_Hide;

@@ -26,13 +26,13 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #pragma once
 #endif
 
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-#include <Windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
 #include <string>
 
 #pragma comment(lib, "Psapi.lib")
-#include <Psapi.h>
+#include <psapi.h>
 
 namespace xiloader
 {

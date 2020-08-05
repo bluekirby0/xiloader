@@ -26,7 +26,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #pragma once
 #endif
 
-#include <Windows.h>
+#include <windows.h>
 #include <iostream>
 #include <string>
 #include <ctime>
