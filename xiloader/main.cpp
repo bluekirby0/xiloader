@@ -26,6 +26,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include "network.h"
 #include "inet_ntop.h"
 #include "inet_pton.h"
+#include "hairpincave.h"
 
 #include <thread>
 
@@ -52,26 +53,7 @@ extern "C"
 /**
  * @brief Hairpin fix codecave.
  */
-__declspec(naked) void HairpinFixCave(void)
-{
-#ifdef _MSC_VER
-    __asm mov eax, g_NewServerAddress
-    __asm mov [edx + 0x012E90], eax
-    __asm mov [edx], eax
-    __asm jmp g_HairpinReturnAddress
-#else
-    asm(
-"movl %0, %%eax\n\t"
-"movl %%eax,0x012E90(%%edx)\n\t"
-"movl %%eax,(%%edx)\n\t"
-"jmpl *%1"
-: /* output*/
-: "r" (g_NewServerAddress), "r" (g_HairpinReturnAddress) /* input*/
-: /* invalidated registers*/
-);
 
-#endif
-}
 
 /**
  * @brief Applies the hairpin fix modifications.
