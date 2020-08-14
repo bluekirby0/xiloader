@@ -26,17 +26,17 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include "network.h"
 #include "inet_ntop.h"
 #include "inet_pton.h"
-#include "hairpincave.h"
+#include "clienthacks.h"
+#include "globals.h"
 
 #include <thread>
+#include <string>
 
-/* Global Variables */
-std::string g_ServerAddress = "127.0.0.1"; // The server address to connect to.
-bool g_Hide = false; // Determines whether or not to hide the console window after FFXI starts.
+xiloader::globals* globalVars;
 
-/* Hairpin Fix Variables */
-DWORD g_NewServerAddress; // Hairpin server address to be overriden with.
-DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
+// Kludge until I can think of a better fix for the hairpin code cave (cannot have parameters)
+DWORD g_NewServerAddress;		// Hairpin server address to be overriden with.
+DWORD g_HairpinReturnAddress;	// Hairpin return address to allow the code cave to return properly.
 
 /**
  * @brief Detour function definitions.
@@ -51,79 +51,6 @@ extern "C"
 }
 
 /**
- * @brief Hairpin fix codecave.
- */
-
-
-/**
- * @brief Applies the hairpin fix modifications.
- *
- * @return void
- */
-void ApplyHairpinFix(xiloader::SharedState& sharedState)
-{
-    do
-    {
-        /* Sleep until we find FFXiMain loaded.. */
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    } while (GetModuleHandleA("FFXiMain.dll") == NULL && sharedState.isRunning);
-
-    if (!sharedState.isRunning)
-    {
-        return;
-    }
-
-    /* Convert server address.. */
-    xiloader::network::ResolveHostname(g_ServerAddress.c_str(), &g_NewServerAddress);
-
-    // Locate the main hairpin location..
-    //
-    // As of 07.08.2013:
-    //      8B 82 902E0100        - mov eax, [edx+00012E90]
-    //      89 02                 - mov [edx], eax <-- edit this
-
-    auto hairpinAddress = (DWORD)xiloader::functions::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x82\xFF\xFF\xFF\xFF\x89\x02\x8B\x0D", "xx????xxxx");
-    if (hairpinAddress == 0)
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to locate main hairpin hack address!");
-        xiloader::NotifyShutdown(sharedState);
-        return;
-    }
-
-    // Locate zoning IP change address..
-    // 
-    // As of 07.08.2013
-    //      74 08                 - je FFXiMain.dll+E5E72
-    //      8B 0D 68322B03        - mov ecx, [FFXiMain.dll+463268]
-    //      89 01                 - mov [ecx], eax <-- edit this
-    //      8B 46 0C              - mov eax, [esi+0C]
-    //      85 C0                 - test eax, eax
-
-    auto zoneChangeAddress = (DWORD)xiloader::functions::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x0D\xFF\xFF\xFF\xFF\x89\x01\x8B\x46", "xx????xxxx");
-    if (zoneChangeAddress == 0)
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to locate zone change hairpin address!");
-        xiloader::NotifyShutdown(sharedState);
-        return;
-    }
-
-    /* Apply the hairpin fix.. */
-    auto caveDest = ((int)HairpinFixCave - ((int)hairpinAddress)) - 5;
-    g_HairpinReturnAddress = hairpinAddress + 0x08;
-
-    *(BYTE*)(hairpinAddress + 0x00) = 0xE9; // jmp
-    *(UINT*)(hairpinAddress + 0x01) = caveDest;
-    *(BYTE*)(hairpinAddress + 0x05) = 0x90; // nop
-    *(BYTE*)(hairpinAddress + 0x06) = 0x90; // nop
-    *(BYTE*)(hairpinAddress + 0x07) = 0x90; // nop
-
-    /* Apply zone ip change patch.. */
-    memset((LPVOID)(zoneChangeAddress + 0x06), 0x90, 2);
-
-    xiloader::console::output(xiloader::color::success, "Hairpin fix applied!");
-}
-
-/**
  * @brief gethostbyname detour callback.
  *
  * @param name      The hostname to obtain information of.
@@ -134,8 +61,10 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
 {
     xiloader::console::output(xiloader::color::debug, "Resolving host: %s", name);
 
+    std::string host;
+    globalVars->getServerAddress(&host);
     if (!strcmp("ffxi00.pol.com", name))
-        return fp_gethostbyname(g_ServerAddress.c_str());
+        return fp_gethostbyname(host.c_str());
     if (!strcmp("pp000.pol.com", name))
         return fp_gethostbyname("127.0.0.1");
 
@@ -192,7 +121,7 @@ inline LPVOID FindCharacters(void** commFuncs)
  *
  * @return void.
  */
-void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& characterList, xiloader::SharedState& sharedState)
+void LaunchFFXI(bool* hacksEnabled, const xiloader::Language& language, char*& characterList, xiloader::SharedState& sharedState)
 {
     bool errorState = false;
 
@@ -208,7 +137,7 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
     {
         /* Attach detour for gethostbyname.. */
         if(MH_CreateHook(&(LPVOID&)gethostbyname, &(LPVOID&)Mine_gethostbyname,
-			reinterpret_cast<LPVOID*>(&fp_gethostbyname)) != MH_OK)
+            reinterpret_cast<LPVOID*>(&fp_gethostbyname)) != MH_OK)
         {
             xiloader::console::output(xiloader::color::error, "Failed to hook function 'gethostbyname'. Cannot continue!");
             errorState = true;
@@ -224,10 +153,28 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
 
     /* Start hairpin hack thread if required.. */
     std::thread thread_hairpinfix;
-    if (!errorState && useHairpinFix)
-    {
+    if (!errorState && hacksEnabled[0])
         thread_hairpinfix = std::thread(ApplyHairpinFix, std::ref(sharedState));
-    }
+
+    /* Start draw distance hack thread if required.. */
+    std::thread thread_drawdist;
+    if (!errorState && hacksEnabled[1])
+        thread_drawdist = std::thread(ApplyDrawDistanceHack, std::ref(sharedState));
+
+    /* Start mob distance hack thread if required.. */
+    std::thread thread_mobdist;
+    if (!errorState && hacksEnabled[2])
+        thread_mobdist = std::thread(ApplyMobDistanceHack, std::ref(sharedState));
+
+    /* Start framerate hack thread if required.. */
+    std::thread thread_fps;
+    if (!errorState && hacksEnabled[3])
+        thread_fps = std::thread(ApplyFPSHack, std::ref(sharedState));
+
+    /* Start language filter hack thread if required.. */
+    std::thread thread_swear;
+    if (!errorState && hacksEnabled[4])
+        thread_swear = std::thread(ApplySwearFilterHack, std::ref(sharedState));
 
     if (!errorState)
     {
@@ -293,17 +240,28 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
     }
 
     if (thread_hairpinfix.joinable())
-    {
         thread_hairpinfix.join();
-    }
+
+    if (thread_drawdist.joinable())
+        thread_drawdist.join();
+
+    if (thread_mobdist.joinable())
+        thread_mobdist.join();
+
+    if (thread_fps.joinable())
+        thread_fps.join();
+
+    if (thread_swear.joinable())
+        thread_swear.join();
+
 
     xiloader::NotifyShutdown(sharedState);
 
     /* Detach detour for gethostbyname. */
     if(MH_DisableHook(&(LPVOID&)gethostbyname) != MH_OK)
     {
-		xiloader::console::output(xiloader::color::error, "Failed unhooking function 'gethostbyname'.");
-	}
+        xiloader::console::output(xiloader::color::error, "Failed unhooking function 'gethostbyname'.");
+    }
 
     /* Cleanup COM */
     CoUninitialize();
@@ -319,13 +277,20 @@ void LaunchFFXI(bool useHairpinFix, const xiloader::Language& language, char*& c
  */
 int __cdecl main(int argc, char* argv[])
 {
-	if (MH_Initialize() != MH_OK)
+    if (MH_Initialize() != MH_OK)
     {
-		xiloader::console::output(xiloader::color::error, "Failed to initialize hooking library.");
+        xiloader::console::output(xiloader::color::error, "Failed to initialize hooking library.");
         return 1;
     }
 
+    globalVars = new xiloader::globals();
+
     bool bUseHairpinFix = false;
+    bool bUseDrawDistanceHack = false;
+    bool bUseMobDistanceHack = false;
+    bool bUseFPSHack = false;
+    bool bUseSwearHack = false;
+
     xiloader::Language language = xiloader::Language::English; // The language of the loader to be used for polcore.
     std::string lobbyServerPort = "51220"; // The server lobby server port.
     std::string username = ""; // The username being logged in with.
@@ -358,7 +323,7 @@ int __cdecl main(int argc, char* argv[])
         /* Server Address Argument */
         if (!_strnicmp(argv[x], "--server", 8))
         {
-            g_ServerAddress = argv[++x];
+            globalVars->setServerAddress(argv[++x]);
             continue;
         }
 
@@ -408,38 +373,82 @@ int __cdecl main(int argc, char* argv[])
         /* Hide Argument */
         if (!_strnicmp(argv[x], "--hide", 6))
         {
-            g_Hide = true;
+            globalVars->setHide(true);
             continue;
         }
 
-        xiloader::console::output(xiloader::color::warning, "Found unknown command argument: %s", argv[x]);
+        /*Override Client Draw Distance*/
+        if (!_strnicmp(argv[x], "--drawdistance", 14))
+        {
+            float dist = atof(argv[++x]);
+            if (dist <= 0.0f)
+                dist = 20.0f;
+            globalVars->setDrawDistance(dist);
+
+            bUseDrawDistanceHack = true;
+            continue;
+        }
+
+        /*Override Client Mob Draw Distance*/
+        if (!_strnicmp(argv[x], "--mobdistance", 14))
+        {
+            float dist = atof(argv[++x]);
+            if (dist <= 0.0f)
+                dist = 20.0f;
+            globalVars->setMobDistance(dist);
+
+            bUseMobDistanceHack = true;
+            continue;
+        }
+
+        /*Override Client Framerate*/
+        if (!_strnicmp(argv[x], "--fps", 5))
+        {
+            bUseFPSHack = true;
+            continue;
+        }
+
+        /*Disable Client Language Filter*/
+        if (!_strnicmp(argv[x], "--nofilter", 10))
+        {
+            bUseSwearHack = true;
+            continue;
+        }
+
+xiloader::console::output(xiloader::color::warning, "Found unknown command argument: %s", argv[x]);
     }
 
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
-    if (xiloader::network::ResolveHostname(g_ServerAddress.c_str(), &ulAddress))
+    std::string host;
+    globalVars->getServerAddress(&host);
+    if (xiloader::network::ResolveHostname(host.c_str(), &ulAddress))
     {
         char address[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &ulAddress, address, INET_ADDRSTRLEN);
-        g_ServerAddress = address;
+        globalVars->setServerAddress(address);
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
         SOCKET pol_socket;
         SOCKET pol_clientSocket;
-        if (xiloader::network::CreateConnection(&sock, g_ServerAddress, "54231"))
+        globalVars->getServerAddress(&host);
+        if (xiloader::network::CreateConnection(&sock, host, "54231"))
         {
             /* Attempt to verify the users account info.. */
-            while (!xiloader::network::VerifyAccount(&sock, g_ServerAddress, username, password))
+            while (!xiloader::network::VerifyAccount(&sock, host, username, password))
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
 
+            bool hacksEnabled[] = { bUseHairpinFix, bUseDrawDistanceHack,
+                bUseMobDistanceHack, bUseFPSHack, bUseSwearHack};
+
             /* Create listen servers.. */
             sharedState.isRunning = true;
-            std::thread thread_ffxiServer(xiloader::network::FFXiDataComm, &sock, std::cref(g_ServerAddress), std::ref(characterList), std::ref(sharedState));
-            std::thread thead_polServer(xiloader::network::PolServer, std::ref(pol_socket), std::ref(pol_clientSocket), std::cref(lobbyServerPort), std::ref(sharedState));
-            std::thread thread_ffxi(LaunchFFXI, bUseHairpinFix, std::cref(language), std::ref(characterList), std::ref(sharedState));
+            std::thread thread_ffxiServer(xiloader::network::FFXiDataComm, &sock, std::cref(host), std::ref(characterList), std::ref(sharedState));
+            std::thread thread_polServer(xiloader::network::PolServer, std::ref(pol_socket), std::ref(pol_clientSocket), std::cref(lobbyServerPort), std::ref(sharedState));
+            std::thread thread_ffxi(LaunchFFXI, hacksEnabled, std::cref(language), std::ref(characterList), std::ref(sharedState));
 
             std::unique_lock<std::mutex> lock(sharedState.mutex);
             sharedState.conditionVariable.wait(lock, [&] { return !sharedState.isRunning; });
@@ -450,7 +459,7 @@ int __cdecl main(int argc, char* argv[])
             xiloader::network::CleanupSocket(sock.s, SD_SEND);
 
             /* Cleanup threads.. */
-            thead_polServer.join();
+            thread_polServer.join();
             thread_ffxiServer.join();
             if (thread_ffxi.joinable())
             {
@@ -468,11 +477,12 @@ int __cdecl main(int argc, char* argv[])
 
     xiloader::console::output(xiloader::color::error, "Closing...");
 
-	if (MH_Uninitialize() != MH_OK)
+    if (MH_Uninitialize() != MH_OK)
     {
-		xiloader::console::output(xiloader::color::error, "Failed to cleanup hooking library.");
+        xiloader::console::output(xiloader::color::error, "Failed to cleanup hooking library.");
         return 1;
     }
 
+    delete globalVars;
     return ERROR_SUCCESS;
 }

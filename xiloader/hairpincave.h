@@ -2,7 +2,7 @@
 extern "C"
 {
 #endif /*__cplusplus*/
-	void HairpinFixCave(void);
+    void HairpinFixCave(void);
 #ifdef __cplusplus
 }
 #endif /*__cplusplus*/

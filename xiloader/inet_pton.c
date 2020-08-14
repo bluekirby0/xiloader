@@ -49,18 +49,18 @@ static int inet_pton6(const char *src, unsigned char *dst);
 int inet_pton(int af, const char *src, void *dst)
 {
 
-	switch (af) {
-	case AF_INET:
-		return (inet_pton4(src, (unsigned char*)dst, 1));
+    switch (af) {
+    case AF_INET:
+        return (inet_pton4(src, (unsigned char*)dst, 1));
 #if USE_IPV6
-	case AF_INET6:
-		return (inet_pton6(src, (unsigned char*)dst));
+    case AF_INET6:
+        return (inet_pton6(src, (unsigned char*)dst));
 #endif
-	default:
-		WSASetLastError(WSAEAFNOSUPPORT);
-		return (-1);
-	}
-	/* NOTREACHED */
+    default:
+        WSASetLastError(WSAEAFNOSUPPORT);
+        return (-1);
+    }
+    /* NOTREACHED */
 }
 
 /* int
@@ -76,108 +76,108 @@ int inet_pton(int af, const char *src, void *dst)
  */
 int	inet_pton4(const char *src, unsigned char *dst, int pton)
 {
-	unsigned int val;
-	unsigned int digit;
-	int base, n;
-	unsigned char c;
-	unsigned int parts[4];
-	register unsigned int *pp = parts;
+    unsigned int val;
+    unsigned int digit;
+    int base, n;
+    unsigned char c;
+    unsigned int parts[4];
+    register unsigned int *pp = parts;
 
-	c = *src;
-	for (;;) {
-		/*
-		 * Collect number up to ``.''.
-		 * Values are specified as for C:
-		 * 0x=hex, 0=octal, isdigit=decimal.
-		 */
-		if (!isdigit(c))
-			return (0);
-		val = 0; base = 10;
-		if (c == '0') {
-			c = *++src;
-			if (c == 'x' || c == 'X')
-				base = 16, c = *++src;
-			else if (isdigit(c) && c != '9')
-				base = 8;
-		}
-		/* inet_pton() takes decimal only */
-		if (pton && base != 10)
-			return (0);
-		for (;;) {
-			if (isdigit(c)) {
-				digit = c - '0';
-				if (digit >= base)
-					break;
-				val = (val * base) + digit;
-				c = *++src;
-			} else if (base == 16 && isxdigit(c)) {
-				digit = c + 10 - (islower(c) ? 'a' : 'A');
-				if (digit >= 16)
-					break;
-				val = (val << 4) | digit;
-				c = *++src;
-			} else
-				break;
-		}
-		if (c == '.') {
-			/*
-			 * Internet format:
-			 *	a.b.c.d
-			 *	a.b.c	(with c treated as 16 bits)
-			 *	a.b	(with b treated as 24 bits)
-			 *	a	(with a treated as 32 bits)
-			 */
-			if (pp >= parts + 3)
-				return (0);
-			*pp++ = val;
-			c = *++src;
-		} else
-			break;
-	}
-	/*
-	 * Check for trailing characters.
-	 */
-	if (c != '\0' && !isspace(c))
-		return (0);
-	/*
-	 * Concoct the address according to
-	 * the number of parts specified.
-	 */
-	n = pp - parts + 1;
-	/* inet_pton() takes dotted-quad only.  it does not take shorthand. */
-	if (pton && n != 4)
-		return (0);
-	switch (n) {
+    c = *src;
+    for (;;) {
+        /*
+         * Collect number up to ``.''.
+         * Values are specified as for C:
+         * 0x=hex, 0=octal, isdigit=decimal.
+         */
+        if (!isdigit(c))
+            return (0);
+        val = 0; base = 10;
+        if (c == '0') {
+            c = *++src;
+            if (c == 'x' || c == 'X')
+                base = 16, c = *++src;
+            else if (isdigit(c) && c != '9')
+                base = 8;
+        }
+        /* inet_pton() takes decimal only */
+        if (pton && base != 10)
+            return (0);
+        for (;;) {
+            if (isdigit(c)) {
+                digit = c - '0';
+                if (digit >= base)
+                	break;
+                val = (val * base) + digit;
+                c = *++src;
+            } else if (base == 16 && isxdigit(c)) {
+                digit = c + 10 - (islower(c) ? 'a' : 'A');
+                if (digit >= 16)
+                	break;
+                val = (val << 4) | digit;
+                c = *++src;
+            } else
+                break;
+        }
+        if (c == '.') {
+            /*
+             * Internet format:
+             *	a.b.c.d
+             *	a.b.c	(with c treated as 16 bits)
+             *	a.b	(with b treated as 24 bits)
+             *	a	(with a treated as 32 bits)
+             */
+            if (pp >= parts + 3)
+                return (0);
+            *pp++ = val;
+            c = *++src;
+        } else
+            break;
+    }
+    /*
+     * Check for trailing characters.
+     */
+    if (c != '\0' && !isspace(c))
+        return (0);
+    /*
+     * Concoct the address according to
+     * the number of parts specified.
+     */
+    n = pp - parts + 1;
+    /* inet_pton() takes dotted-quad only.  it does not take shorthand. */
+    if (pton && n != 4)
+        return (0);
+    switch (n) {
 
-	case 0:
-		return (0);		/* initial nondigit */
+    case 0:
+        return (0);		/* initial nondigit */
 
-	case 1:				/* a -- 32 bits */
-		break;
+    case 1:				/* a -- 32 bits */
+        break;
 
-	case 2:				/* a.b -- 8.24 bits */
-		if (parts[0] > 0xff || val > 0xffffff)
-			return (0);
-		val |= parts[0] << 24;
-		break;
+    case 2:				/* a.b -- 8.24 bits */
+        if (parts[0] > 0xff || val > 0xffffff)
+            return (0);
+        val |= parts[0] << 24;
+        break;
 
-	case 3:				/* a.b.c -- 8.8.16 bits */
-		if ((parts[0] | parts[1]) > 0xff || val > 0xffff)
-			return (0);
-		val |= (parts[0] << 24) | (parts[1] << 16);
-		break;
+    case 3:				/* a.b.c -- 8.8.16 bits */
+        if ((parts[0] | parts[1]) > 0xff || val > 0xffff)
+            return (0);
+        val |= (parts[0] << 24) | (parts[1] << 16);
+        break;
 
-	case 4:				/* a.b.c.d -- 8.8.8.8 bits */
-		if ((parts[0] | parts[1] | parts[2] | val) > 0xff)
-			return (0);
-		val |= (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8);
-		break;
-	}
-	if (dst) {
-		val = htonl(val);
-		memcpy(dst, &val, INADDRSZ);
-	}
-	return (1);
+    case 4:				/* a.b.c.d -- 8.8.8.8 bits */
+        if ((parts[0] | parts[1] | parts[2] | val) > 0xff)
+            return (0);
+        val |= (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8);
+        break;
+    }
+    if (dst) {
+        val = htonl(val);
+        memcpy(dst, &val, INADDRSZ);
+    }
+    return (1);
 }
 
 #if USE_IPV6
@@ -196,87 +196,87 @@ int	inet_pton4(const char *src, unsigned char *dst, int pton)
  */
 int inet_pton6(const char *src, unsigned char *dst)
 {
-	static const char xdigits_l[] = "0123456789abcdef",
-			  xdigits_u[] = "0123456789ABCDEF";
-	unsigned char tmp[IN6ADDRSZ], *tp, *endp, *colonp;
-	const char *xdigits, *curtok;
-	int ch, saw_xdigit;
-	unsigned int val;
+    static const char xdigits_l[] = "0123456789abcdef",
+              xdigits_u[] = "0123456789ABCDEF";
+    unsigned char tmp[IN6ADDRSZ], *tp, *endp, *colonp;
+    const char *xdigits, *curtok;
+    int ch, saw_xdigit;
+    unsigned int val;
 
-	memset((tp = tmp), '\0', IN6ADDRSZ);
-	endp = tp + IN6ADDRSZ;
-	colonp = NULL;
-	/* Leading :: requires some special handling. */
-	if (*src == ':')
-		if (*++src != ':')
-			return (0);
-	curtok = src;
-	saw_xdigit = 0;
-	val = 0;
-	while ((ch = *src++) != '\0') {
-		const char *pch;
+    memset((tp = tmp), '\0', IN6ADDRSZ);
+    endp = tp + IN6ADDRSZ;
+    colonp = NULL;
+    /* Leading :: requires some special handling. */
+    if (*src == ':')
+        if (*++src != ':')
+            return (0);
+    curtok = src;
+    saw_xdigit = 0;
+    val = 0;
+    while ((ch = *src++) != '\0') {
+        const char *pch;
 
-		if ((pch = strchr((xdigits = xdigits_l), ch)) == NULL)
-			pch = strchr((xdigits = xdigits_u), ch);
-		if (pch != NULL) {
-			val <<= 4;
-			val |= (pch - xdigits);
-			if (val > 0xffff)
-				return (0);
-			saw_xdigit = 1;
-			continue;
-		}
-		if (ch == ':') {
-			curtok = src;
-			if (!saw_xdigit) {
-				if (colonp)
-					return (0);
-				colonp = tp;
-				continue;
-			} else if (*src == '\0')
-				return (0);
-			if (tp + INT16SZ > endp)
-				return (0);
-			*tp++ = (unsigned char) (val >> 8) & 0xff;
-			*tp++ = (unsigned char) val & 0xff;
-			saw_xdigit = 0;
-			val = 0;
-			continue;
-		}
-		if (ch == '.' && ((tp + INADDRSZ) <= endp) &&
-		    inet_pton4(curtok, tp, 1) > 0) {
-			tp += INADDRSZ;
-			saw_xdigit = 0;
-			break;	/* '\0' was seen by inet_pton4(). */
-		}
-		return (0);
-	}
-	if (saw_xdigit) {
-		if (tp + INT16SZ > endp)
-			return (0);
-		*tp++ = (unsigned char) (val >> 8) & 0xff;
-		*tp++ = (unsigned char) val & 0xff;
-	}
-	if (colonp != NULL) {
-		/*
-		 * Since some memmove()'s erroneously fail to handle
-		 * overlapping regions, we'll do the shift by hand.
-		 */
-		const int n = tp - colonp;
-		int i;
+        if ((pch = strchr((xdigits = xdigits_l), ch)) == NULL)
+            pch = strchr((xdigits = xdigits_u), ch);
+        if (pch != NULL) {
+            val <<= 4;
+            val |= (pch - xdigits);
+            if (val > 0xffff)
+                return (0);
+            saw_xdigit = 1;
+            continue;
+        }
+        if (ch == ':') {
+            curtok = src;
+            if (!saw_xdigit) {
+                if (colonp)
+                	return (0);
+                colonp = tp;
+                continue;
+            } else if (*src == '\0')
+                return (0);
+            if (tp + INT16SZ > endp)
+                return (0);
+            *tp++ = (unsigned char) (val >> 8) & 0xff;
+            *tp++ = (unsigned char) val & 0xff;
+            saw_xdigit = 0;
+            val = 0;
+            continue;
+        }
+        if (ch == '.' && ((tp + INADDRSZ) <= endp) &&
+            inet_pton4(curtok, tp, 1) > 0) {
+            tp += INADDRSZ;
+            saw_xdigit = 0;
+            break;	/* '\0' was seen by inet_pton4(). */
+        }
+        return (0);
+    }
+    if (saw_xdigit) {
+        if (tp + INT16SZ > endp)
+            return (0);
+        *tp++ = (unsigned char) (val >> 8) & 0xff;
+        *tp++ = (unsigned char) val & 0xff;
+    }
+    if (colonp != NULL) {
+        /*
+         * Since some memmove()'s erroneously fail to handle
+         * overlapping regions, we'll do the shift by hand.
+         */
+        const int n = tp - colonp;
+        int i;
 
-		if (tp == endp)
-			return (0);
-		for (i = 1; i <= n; i++) {
-			endp[- i] = colonp[n - i];
-			colonp[n - i] = 0;
-		}
-		tp = endp;
-	}
-	if (tp != endp)
-		return (0);
-	memcpy(dst, tmp, IN6ADDRSZ);
-	return (1);
+        if (tp == endp)
+            return (0);
+        for (i = 1; i <= n; i++) {
+            endp[- i] = colonp[n - i];
+            colonp[n - i] = 0;
+        }
+        tp = endp;
+    }
+    if (tp != endp)
+        return (0);
+    memcpy(dst, tmp, IN6ADDRSZ);
+    return (1);
 }
 #endif
 

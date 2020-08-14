@@ -30,9 +30,12 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include <iostream>
 #include <string>
 #include <ctime>
+#include <mutex>
 
 namespace xiloader
 {
+    static std::mutex _console_lock;
+
     /**
     * @brief Console color enumeration.
     */
@@ -90,7 +93,7 @@ namespace xiloader
 
         /**
          * @brief Prints a text fragment with the specified color to the console.
-         * 
+         *
          * @param c         The color to print the fragment with.
          * @param message   The fragment to print.
          */
@@ -131,16 +134,17 @@ namespace xiloader
             char timestamp[256];
             ::strftime(timestamp, sizeof timestamp, "[%m/%d/%y %H:%M:%S] ", &timeinfo);
 
-            /* Output the timestamp */
-            print(xiloader::color::lightyelllow, timestamp);
-
             /* Parse the incoming message */
             char buffer[1024];
             ::snprintf(buffer, sizeof buffer, format, args...);
+
+            const std::lock_guard<std::mutex> lock(_console_lock);
+
+            /* Output the timestamp */
+            print(xiloader::color::lightyelllow, timestamp);
+
             /* Output the message */
-
             print(c, buffer);
-
             std::cout << std::endl;
         }
 

@@ -85,7 +85,7 @@ namespace xiloader
     static void NotifyShutdown(xiloader::SharedState& sharedState)
     {
         if (sharedState.isRunning)
-        { 
+        {
             std::lock_guard<std::mutex> lock(sharedState.mutex);
             sharedState.isRunning = false;
             sharedState.conditionVariable.notify_all();
@@ -105,7 +105,7 @@ namespace xiloader
          * @return void.
          */
         static void PolDataComm(SOCKET* client, xiloader::SharedState& sharedState);
-        
+
     public:
 
         /**
@@ -141,7 +141,7 @@ namespace xiloader
          * @return True on success, false otherwise.
          */
         static bool CreateListenServer(SOCKET* sock, int protocol, const char* port);
-        
+
         /**
          * @brief Resolves the given hostname to its long ip format.
          *

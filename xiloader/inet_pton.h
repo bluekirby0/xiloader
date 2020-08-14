@@ -9,4 +9,3 @@ int inet_pton(int af, const char *src, void *dst);
 }
 #endif /* __cplusplus */
 #endif /* NEED_INET6 */
- 
